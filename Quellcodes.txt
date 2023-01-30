@@ -1,0 +1,1796 @@
+// -------------------------------DataFlex------------------------------------
+//                          Das Spiel Vier gewinnt
+// ---------------------------------------------------------------------------
+Use Windows.pkg
+Use DFClient.pkg
+Use dfBitmap.pkg
+
+Class cArrowBitmapContainer is a BitmapContainer
+   Procedure Construct_Object
+      Forward Send Construct_Object 
+      
+      // Index des gedrückten Pfeiles.
+      Property Integer piColumnIdx
+      
+      // Zahl von Bällen in der Spalte, auf deren Pfeil gedrückt wurde.
+      Property Integer piBallNum 0
+   End_Procedure
+   
+   // Das Event wird beim Click auf einen Pfeil aktiviert.
+   Procedure Mouse_Up Integer iWindowNumber Integer iPosition
+      // iMove: Zahl von Zügen, die vom Anfang des Spiels gemacht wurden.
+      // iIdxX, iIdxY: X und Y Indizes des neuen Balles.
+      Integer iMove iIdxX iIdxY
+      
+      Boolean bIsWinner
+      
+      String[][] sCircles
+      Handle hoCircleTemp
+      Handle[][] hoCirclesTemp
+      
+      Get pbFinish of TEST001 to bIsWinner
+      
+      Get piMove of TEST001 to iMove
+      Get phoCircles of TEST001 to hoCirclesTemp
+      Get psCircles of TEST001 to sCircles
+      
+      // Es wird überprüft, ob es noch freie Zellen gibt.
+      If (iMove <= 42) Begin
+         
+         // Es wird überprüft, ob die Spalte, auf deren Pfeil gedrückt wurde, voll von Bällen ist.
+         // Es wird noch überprüft, ob das Spiel schon einen Gewinner hat.
+         If ((piBallNum(Self) < 6) and (bIsWinner = False)) Begin
+            Forward Send Mouse_Up iWindowNumber iPosition
+            
+            Move (SizeOfArray(hoCirclesTemp) - 1 - piBallNum(Self)) to iIdxX
+            Move (piColumnIdx(Self)) to iIdxY
+            Move hoCirclesTemp[iIdxX][iIdxY] to hoCircleTemp
+            
+            // Spieler ROT ist am Zug.
+            If (Mod(iMove, 2) = 1) Begin
+               Set Bitmap of hoCircleTemp to "ROT.bmp"
+               Set Label of oTextBox_Move to "Spieler GELB ist am Zug!"
+               
+               Move "r" to sCircles[iIdxX][iIdxY] // "r" heißt red
+               Set psCircles of TEST001 to sCircles
+               
+               // Es wird überprüft, ob Spieler ROT das Spiel gewonnen hat.
+               Get TEST001_IsWinner iIdxX iIdxY "r" to bIsWinner
+               If (bIsWinner) Begin
+                  Set Label of oTextBox_Move to "Spieler ROT hat gewonnen!"
+                  Set pbFinish of TEST001 to True  
+                  Procedure_Return
+               End 
+            End
+            
+            // Spieler GELB ist am Zug.
+            Else Begin
+               Set Bitmap of hoCircleTemp to "GELB.bmp"
+               Set Label of oTextBox_Move to "Spieler ROT ist am Zug!"
+               
+               Move "y" to sCircles[iIdxX][iIdxY] // "y" heißt yellow
+               Set psCircles of TEST001 to sCircles 
+               
+               // Es wird überprüft, ob Spieler GELB das Spiel gewonnen hat.
+               Get TEST001_IsWinner iIdxX iIdxY "y" to bIsWinner
+               If (bIsWinner) Begin
+                  Set Label of oTextBox_Move to "Spieler GELB hat gewonnen!"  
+                  Set pbFinish of TEST001 to True
+                  Procedure_Return
+               End 
+            End
+            
+            // Zahl von Zügen wird nach jedem Druck auf den Pfeil inkrementiert.
+            Increment iMove
+            Set piMove of TEST001 to iMove
+            
+            // Zahl von Bällen in der Spalte, auf deren Pfeil gedrückt wurde, wird inkrementiert.
+            Set piBallNum to (piBallNum(Self) + 1)
+         End
+      End
+      
+      // Falls es keine freie Zelle gibt, ist das Spiel unentschieden.
+      Else ;
+         Set Label of oTextBox_Move to "Das Spiel ist unentschieden!" 
+         
+   End_Procedure
+End_Class
+
+Deferred_View Activate_TEST001 for ;
+Object TEST001 is a dbView
+   Set Border_Style to Border_Thick
+   Set Size to 172 300
+   Set Location to 2 2
+   Set Label to "TEST001"
+   
+   Property Integer piMove 1 // Zahl von Zügen, die vom Anfang des Spiels gemacht wurden.
+   Property Boolean pbFinish False
+   Property String[][] psCircles
+   Property Handle[] phoArrows
+   Property Handle[][] phoCircles
+   
+   // Die Prozedur wird beim Starten des Programms aufgerufen. Sie ruft wieder Prozeduren TEST001_InitializeArrows
+   // und TEST001_InitializeCircles, die alle BitmapContainers auf das View legen, auf.
+   // Ein TextBox für Mitteilungen wird auch auf das View gelegt.
+   Procedure Activating
+      Forward Send Activating
+      
+      Send TEST001_InitializeArrows
+      Send TEST001_InitializeCircles
+      
+      Object oTextBox_Move is a TextBox
+         Set Size to 10 50
+         Set Location to 12 25
+         Set Label to "Spieler ROT ist am Zug!"
+      End_Object
+   End_Procedure
+   
+   // https://support.dataaccess.com/Forums/showthread.php?34944-Array-of-objects-inside-class&p=165068&mode=linear&highlight=array+objects#post165068
+   // Die Prozedur legt BitmapContainers mit Pfeilen auf das View. Sie wird beim Starten des Programms aufgerufen.
+   Procedure TEST001_InitializeArrows
+      Integer iIdx
+      Handle hoObj
+      
+      // Es gibt insgesamt sieben Pfeile.
+      // Für jeden Pfeil wird ArrowBitmapContainer instanziert.
+      // Die Lokation des Pfeils wird ermittelt. 
+      For  iIdx from 0 to 6
+         Get Create (RefClass(cArrowBitmapContainer)) to hoObj
+         
+         Set piColumnIdx of hoObj to iIdx
+         
+         Set Size of hoObj to 25 25
+         Set Location of hoObj to 25 (25 + (25 * iIdx))
+         Set Bitmap of hoObj to "PFEIL.bmp"
+         
+         Set phoArrows to (InsertInArray(phoArrows(Self), -1, hoObj))
+      Loop
+   End_Procedure
+   
+   // https://support.dataaccess.com/Forums/showthread.php?34944-Array-of-objects-inside-class&p=165068&mode=linear&highlight=array+objects#post165068
+   // Die Prozedur legt BitmapContainers, die Kreise entahlten werden, auf das View. Sie wird beim Starten des Programms aufgerufen.
+   Procedure TEST001_InitializeCircles
+      Integer iIdxX iIdxY
+      String[] sRowCircles
+      Handle[] hoObjs
+      Handle hoObj
+      
+      // BitmapContainers werden auf ein Feld von sechs Zeilen und sieben Spalten gelegt. Sie werden in die Zukunft Kreise enthalten.
+      // Die Lokation der BitmapContainer wird ermittelt. 
+      For  iIdxY from 0 to 5
+         For iIdxX from 0 to 6
+            Get Create (RefClass(BitmapContainer)) to hoObj
+            Set Size of hoObj to 25 25
+            Set Location of hoObj to (75 + (25 * iIdxY)) (25 + (25 * iIdxX))
+            //Set Bitmap of hoObj to "white.bmp"
+            
+            Move (InsertInArray(hoObjs, -1, hoObj)) to hoObjs
+            Move (InsertInArray(sRowCircles, -1, "o")) to sRowCircles // Property psCircles enthält am Anfang keine Kreise, was mit String "o" bezeichnet wird.
+         Loop
+      
+         Set phoCircles to (InsertInArray(phoCircles(Self), -1, hoObjs))
+         Move (ResizeArray(hoObjs, 0)) to hoObjs
+         
+         Set psCircles to (InsertInArray(psCircles(Self), -1, sRowCircles)) // Property psCircles enthält am Anfang keine Kreise, was mit String "o" bezeichnet wird.
+         Move (ResizeArray(sRowCircles, 0)) to sRowCircles //
+      Loop
+   End_Procedure
+   
+   // Die Funktion erhält den Zeilenindex und den Spaltenindex des neuen Balles.
+   // Die Funktion erhält die Bezeichnung sPlayer für den Spieler. sPlayer muss "r" für Spieler ROT und "y" für Spieler GELB sein.
+   // Die Funktion kehrt True zurück, falls der Spieler mit dem neuen Ball gewonnen hat. Andernfalls kehrt sie False zurück. 
+   Function TEST001_IsWinner Integer iRowIdx Integer iColumnIdx String sPlayer Returns Boolean
+      Integer iIdx
+      String sRow sColumn sMainDiagonal sBackwardDiagonal sWinningCombination
+      String[][] sAllCircles
+      String[] sRowCircles sColumnCircles
+      
+      // Für Spieler ROT sWinningCombination ist "rrrr"
+      // Für Spieler GELB sWinningCombination ist "yyyy"
+      For iIdx from 0 to 3
+         Move (Append(sWinningCombination, sPlayer)) to sWinningCombination
+      Loop
+      
+      Move (psCircles(Self)) to sAllCircles
+      
+      // String sRow enthält Bezeichnungen von Bällen in der Zeile des neuen Balles.
+      // String sRow hat die Form "xxxxxxx", x ? {r, y, o}
+      Move sAllCircles[iRowIdx] to sRowCircles
+      Move (StrJoinFromArray(sRowCircles, "")) to sRow
+      
+      // String sColumn enthält Bezeichnungen von Bällen in der Spalte des neuen Balles.
+      // String sColumn hat die Form "xxxxxx", x ? {r, y, o}
+      For iIdx from 0 to 5
+         Move (InsertInArray(sColumnCircles, -1, sAllCircles[iIdx][iColumnIdx])) to sColumnCircles
+      Loop
+      Move (StrJoinFromArray(sColumnCircles, "")) to sColumn
+      
+      // Die Hauptdiagonale, deren Mitglied der neue Ball ist, wird ermittelt und in String sMainDiagonal gespeichert. 
+      Get TEST001_GetMainDiagonal iRowIdx iColumnIdx to sMainDiagonal
+      
+      // Die Gegendiagonale, deren Mitglied der neue Ball ist, wird ermittelt und in String sBackwardDiagonal gespeichert.
+      Get TEST001_GetBackwardDiagonal iRowIdx iColumnIdx to sBackwardDiagonal
+      
+      // Falls die Zeile des neuen Balles "rrrr" oder "yyyy" enthält, hat Spieler ROT bzw. Spieler GELB das Spiel gewonnen.
+      If ((Pos(sWinningCombination, sRow) <> 0)) ;
+         Function_Return True
+         
+      // Falls die Spalte des neuen Balles "rrrr" oder "yyyy" enthält, hat Spieler ROT bzw. Spieler GELB das Spiel gewonnen.
+      If ((Pos(sWinningCombination, sColumn) <> 0)) ;
+         Function_Return True
+         
+      // Falls die Hauptdiagonale des neuen Balles "rrrr" oder "yyyy" enthält, hat Spieler ROT bzw. Spieler GELB das Spiel gewonnen.
+      If ((Pos(sWinningCombination, sMainDiagonal) <> 0)) ;
+         Function_Return True
+         
+      // Falls die Gegendiagonale des neuen Balles "rrrr" oder "yyyy" enthält, hat Spieler ROT bzw. Spieler GELB das Spiel gewonnen.
+      If ((Pos(sWinningCombination, sBackwardDiagonal) <> 0)) ;
+         Function_Return True
+         
+      Function_Return False
+   End_Function
+   
+   // Die Hauptdiagonale, deren Mitglied der neue Ball mit Koordinaten (iRowIdx, iColumnIdx) ist, wird ermittelt und als String zurückgekehrt. 
+   Function TEST001_GetMainDiagonal Integer iRowIdx Integer iColumnIdx Returns String
+      Integer iIdx iRowMaxIdx iColumnMaxIdx
+      Boolean bStop
+      String sMainDiagonal
+      String[][] sAllCircles
+      
+      // Es gibt sechs Zeilen mit Bällen
+      Move 5 to iRowMaxIdx
+      
+      // Es gibt sieben Spalten mit Bällen
+      Move 6 to iColumnMaxIdx
+      
+      Move (psCircles(Self)) to sAllCircles
+      
+      // Der neue Ball wird auf String sMainDiagonal gelegt.
+      Move sAllCircles[iRowIdx][iColumnIdx] to sMainDiagonal
+      
+      // Bälle, die sich auf Hauptdiagonale rechts unten vom neuen Ball befinden, werden am Ende des sMainDiagoal Strings hinzugefügt.
+      Move 1 to iIdx
+      Move False to bStop
+      Repeat
+         If (((iRowIdx + iIdx) <= iRowMaxIdx) and ((iColumnIdx + iIdx) <= iColumnMaxIdx)) Begin
+            Move (Append(sMainDiagonal, sAllCircles[iRowIdx + iIdx][iColumnIdx + iIdx])) to sMainDiagonal
+            Increment iIdx
+         End
+         
+         Else ;
+            Move True to bStop
+      Until (bStop)
+      
+      // Bälle, die sich auf Hauptdiagonale links oben vom neuen Ball befinden, werden am Anfang des sMainDiagoal Strings hinzugefügt.
+      Move 1 to iIdx
+      Move False to bStop
+      Repeat
+         If (((iRowIdx - iIdx) >= 0) and ((iColumnIdx - iIdx) >= 0)) Begin
+            Move (Append(sAllCircles[iRowIdx - iIdx][iColumnIdx - iIdx], sMainDiagonal)) to sMainDiagonal
+            Increment iIdx
+         End
+         
+         Else ;
+            Move True to bStop
+      Until (bStop)
+      
+      Function_Return sMainDiagonal
+   End_Function
+   
+   // Die Gegendiagonale, deren Mitglied der neue Ball mit Koordinaten (iRowIdx, iColumnIdx) ist, wird ermittelt und als String zurückgekehrt. 
+   Function TEST001_GetBackwardDiagonal Integer iRowIdx Integer iColumnIdx Returns String
+      Integer iIdx iRowMaxIdx iColumnMaxIdx
+      Boolean bStop
+      String sBackwardDiagonal
+      String[][] sAllCircles
+      
+      // Es gibt sechs Zeilen mit Bällen
+      Move 5 to iRowMaxIdx
+      
+      // Es gibt sieben Spalten mit Bällen
+      Move 6 to iColumnMaxIdx
+      
+      Move (psCircles(Self)) to sAllCircles
+      
+      // Der neue Ball wird auf String sBackwardDiagonal gelegt.
+      Move sAllCircles[iRowIdx][iColumnIdx] to sBackwardDiagonal
+      
+      // Bälle, die sich auf Gegendiagonale links unten vom neuen Ball befinden, werden am Anfang des sBackwardDiagoal Strings hinzugefügt.
+      Move 1 to iIdx
+      Move False to bStop
+      Repeat
+         If (((iRowIdx + iIdx) <= iRowMaxIdx) and ((iColumnIdx - iIdx) >= 0)) Begin
+            Move (Append(sAllCircles[iRowIdx + iIdx][iColumnIdx - iIdx], sBackwardDiagonal)) to sBackwardDiagonal
+            Increment iIdx
+         End
+         
+         Else ;
+            Move True to bStop
+      Until (bStop)
+      
+      // Bälle, die sich auf Gegendiagonale rechts oben vom neuen Ball befinden, werden am Ende des sBackwardDiagoal Strings hinzugefügt.
+      Move 1 to iIdx
+      Move False to bStop
+      Repeat
+         If (((iRowIdx - iIdx) >= 0) and ((iColumnIdx + iIdx) <= iColumnMaxIdx)) Begin
+            Move (Append(sBackwardDiagonal, sAllCircles[iRowIdx - iIdx][iColumnIdx + iIdx])) to sBackwardDiagonal
+            Increment iIdx
+         End
+         
+         Else ;
+            Move True to bStop
+      Until (bStop)
+      
+      Function_Return sBackwardDiagonal
+   End_Function
+
+Cd_End_Object
+
+
+/*-----------------------------------C#---------------------------------------
+die Masterarbeit: Eine Studie zum Zusammenhang zwischen
+physikalisch-chemischen Eigenschaften der Signalpeptide und
+antimikrobieller Funktion der zugehörigen reifen Peptide
+-----------------------------------------------------------------------------*/
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.IO;
+using Excel = Microsoft.Office.Interop.Excel;
+using System.Drawing;
+
+namespace Diplomski_cysRichPeptides
+{
+    public class Peptide
+    {
+        public string Id { get; set; }
+        public string Sequence { get; set; }
+        public int CleavageSite { get; set; }
+
+        public Peptide(string id, string sequence, int cleavageSite)
+        {
+            Id = id;
+            Sequence = sequence;
+            CleavageSite = cleavageSite;
+        }
+
+        public string SignalPeptide()
+        {
+            return Sequence.Substring(0, CleavageSite - 1);
+        }
+
+        public string MaturePeptide()
+        {
+            return Sequence.Substring(CleavageSite - 1);
+        }
+
+    }
+
+    public class Fasta
+    {
+        public List<Peptide> Peptides { get; set; }
+
+        public Fasta(string fileName)
+        {
+            Peptides = new List<Peptide>();
+            using (StreamReader sr = new StreamReader(fileName))
+            {
+                string id;
+                string sequence;
+                int cleavageSite;
+
+                while (!sr.EndOfStream)
+                {
+                    string line = sr.ReadLine();
+
+                    if (line.StartsWith(">"))
+                    {
+                        id = line;
+                        sequence = "";
+                        int.TryParse(id.Split('=').Last(), out cleavageSite);
+                        Peptides.Add(new Peptide(id, sequence, cleavageSite));
+                    }
+
+                    else if (line.Length != 0 && Peptides.Count() != 0)
+                        Peptides[Peptides.Count() - 1].Sequence += line;
+
+                }
+            }
+        }
+    }
+
+    public static class Primary
+    {
+        /*
+
+        0..............G
+        1..............A
+        2..............P
+        3..............V
+        4..............L
+        5..............I
+        6..............M
+        7..............F
+        8..............Y
+        9..............W
+        10..............S
+        11..............T
+        12..............C
+        13..............N
+        14..............Q
+        15..............K
+        16..............H
+        17..............R
+        18..............D
+        19..............E
+
+        */
+
+        public static int[] AminoAcidCounter(string aminoAcidSeq)
+        {
+            int[] aacidCounter = new int[20];
+            char[] seq = aminoAcidSeq.ToCharArray();
+            int i;
+
+            for (i = 0; i < 20; i++) aacidCounter[i] = 0;
+            for (i = 0; i < aminoAcidSeq.Length; i++)
+            {
+                if (seq[i] == 'G' || seq[i] == 'A' || seq[i] == 'P' || seq[i] == 'V' 
+                    || seq[i] == 'L' || seq[i] == 'I' || seq[i] == 'M' || seq[i] == 'F' 
+                    || seq[i] == 'Y' || seq[i] == 'W' || seq[i] == 'S' || seq[i] == 'T' 
+                    || seq[i] == 'C' || seq[i] == 'N' || seq[i] == 'Q' || seq[i] == 'K' 
+                    || seq[i] == 'H' || seq[i] == 'R' || seq[i] == 'D' || seq[i] == 'E')
+                {
+                    if (seq[i] == 'G') aacidCounter[0]++;
+                    if (seq[i] == 'A') aacidCounter[1]++;
+                    if (seq[i] == 'P') aacidCounter[2]++;
+                    if (seq[i] == 'V') aacidCounter[3]++;
+                    if (seq[i] == 'L') aacidCounter[4]++;
+                    if (seq[i] == 'I') aacidCounter[5]++;
+                    if (seq[i] == 'M') aacidCounter[6]++;
+                    if (seq[i] == 'F') aacidCounter[7]++;
+                    if (seq[i] == 'Y') aacidCounter[8]++;
+                    if (seq[i] == 'W') aacidCounter[9]++;
+                    if (seq[i] == 'S') aacidCounter[10]++;
+                    if (seq[i] == 'T') aacidCounter[11]++;
+                    if (seq[i] == 'C') aacidCounter[12]++;
+                    if (seq[i] == 'N') aacidCounter[13]++;
+                    if (seq[i] == 'Q') aacidCounter[14]++;
+                    if (seq[i] == 'K') aacidCounter[15]++;
+                    if (seq[i] == 'H') aacidCounter[16]++;
+                    if (seq[i] == 'R') aacidCounter[17]++;
+                    if (seq[i] == 'D') aacidCounter[18]++;
+                    if (seq[i] == 'E') aacidCounter[19]++;
+                }
+            }
+
+            return aacidCounter;
+        }
+
+        public static double GravyKD(string seq)
+        {
+            char[] aacid = new char[] { 'G', 'A', 'P', 'V', 'L', 'I', 'M', 'F', 'Y',
+                'W', 'S', 'T', 'C', 'N', 'Q', 'K', 'H', 'R', 'D', 'E' };
+            int[] aacidCounter = new int[20];
+            aacidCounter = AminoAcidCounter(seq);
+
+            // Kyte-Doolittle scale
+            double[] gravyParam = new double[20] { -0.4, 1.8, -1.6, 4.2, 3.8,
+                                             4.5, 1.9, 2.8, -1.3, -0.9,
+                                            -0.8, -0.7, 2.5, -3.5, -3.5,
+                                            -3.9, -3.2, -4.5, -3.5, -3.5 };
+
+            double gravyTotal = 0.0, gravyValue = 0.0;
+
+            for (int i = 0; i < 20; i++)
+                gravyTotal = gravyTotal + ((float)aacidCounter[i] * gravyParam[i]);
+
+            gravyValue = gravyTotal / seq.Length;
+
+            return gravyValue;
+        }
+
+        public static int ChargeCounter(string aminoAcidSeq)
+        {
+            int i;
+            int chargeCounter = 0;
+            char[] sequence = aminoAcidSeq.ToCharArray();
+
+            for (i = 0; i < aminoAcidSeq.Length; i++)
+            {
+                if (sequence[i] == 'K' || sequence[i] == 'R') chargeCounter++;
+                else if (sequence[i] == 'D' || sequence[i] == 'E') chargeCounter--;
+            }
+
+            return chargeCounter;
+        }
+
+        public static int CysCounter(string aminoAcidSeq)
+        {
+            int i;
+            int cCounter = 0;
+            char[] sequence = aminoAcidSeq.ToCharArray();
+
+            for (i = 0; i < aminoAcidSeq.Length; i++)
+                if (sequence[i] == 'C') cCounter++;
+
+            return cCounter;
+        }
+    }
+    class Program
+    {
+        static void CysRichPeptide(Peptide p, ref int i, double hydroKD)
+        {
+            int numCys = 4;
+
+            int swLength = 35;
+            string sw = "";
+            string swTmp;
+            int swStartPos = 0;
+
+            if (p.MaturePeptide().Length >= swLength)
+                swTmp = p.MaturePeptide().Substring(swStartPos, swLength);
+
+            else
+                return;
+
+            double cys = 0;
+            double cysTmp = 0;
+            while (true)
+            {
+                if (Primary.CysCounter(swTmp) >= numCys)
+                {
+                    cysTmp = Primary.CysCounter(swTmp);
+
+                    if (cysTmp > cys)
+                    {
+                        cys = cysTmp;
+                        sw = swTmp;
+                    }
+                }
+
+                if (p.MaturePeptide().Length - swLength - swStartPos >= 1)
+                {
+                    swStartPos++;
+                    swTmp = p.MaturePeptide().Substring(swStartPos, swLength);
+                }
+                else
+                    break;
+            }
+
+            if (sw != "")
+            {
+                Excel.Range signalPeptide = workSheet.Cells[i + 3, 1];
+                signalPeptide.Value = p.SignalPeptide();
+                //signalPeptide.Characters[hRegStartPos + 1, 11].Font.Color = 
+                //  System.Drawing.ColorTranslator.ToOle(System.Drawing.Color.Red);
+                signalPeptide.Characters[hRegStartPos + 1, 11].Font.Bold = true;
+
+                Excel.Range cysRichSequence = workSheet.Cells[i + 3, 2];
+                cysRichSequence.Value = sw;
+
+                Excel.Range charge = workSheet.Cells[i + 3, 3];
+                charge.Value = Primary.ChargeCounter(sw).ToString();
+
+                Excel.Range cysteine = workSheet.Cells[i + 3, 4];
+                cysteine.Value = Primary.CysCounter(sw);
+
+                Excel.Range hydro = workSheet.Cells[i + 3, 5];
+                hydro.Value = Math.Round(hydroKD, 3);
+
+                int uniprotIdStartIndex = p.Id.IndexOf('|');
+                int uniprotIdEndIndex = p.Id.LastIndexOf('|');
+                string uniprotId = p.Id.Substring(uniprotIdStartIndex + 1, 
+                    uniprotIdEndIndex - uniprotIdStartIndex - 1);
+                string uniprotHyperlink = "http://www.uniprot.org/uniprot/" +uniprotId;
+
+                Excel.Range peptideId = workSheet.Cells[i + 3, 6];
+                //workSheet.Hyperlinks.Add(peptideId, uniprotHyperlink, Type.Missing, 
+                //  "Click to go to UniprotKB", p.Id);
+                workSheet.Hyperlinks.Add(peptideId, uniprotHyperlink, Type.Missing,
+                  "Click to go to UniprotKB", uniprotId);
+
+                Console.WriteLine(i);
+                i++;
+                return;
+            }
+
+            return;
+
+        }
+
+        static int hRegStartPos;
+        static double HRegionHydro(Peptide p)
+        {
+            int swLength = 11;
+            string sw;
+            int swStartPos = 0;
+            hRegStartPos = swStartPos;
+
+            if (p.SignalPeptide().Length >= swLength)
+                sw = p.SignalPeptide().Substring(swStartPos, swLength);
+
+            else
+                return -100;
+
+            double hydroKD = Primary.GravyKD(sw);
+
+            while (p.SignalPeptide().Length - swLength - swStartPos >= 1)
+            {
+                swStartPos++;
+                sw = p.SignalPeptide().Substring(swStartPos, swLength);
+                double tmpHydro = Primary.GravyKD(sw);
+
+                if (tmpHydro > hydroKD)
+                {
+                    hydroKD = tmpHydro;
+                    hRegStartPos = swStartPos;
+                }
+            }
+
+            return hydroKD;
+
+        }
+        static void Filter(Fasta proteom)
+        {
+            int i = 1;
+            foreach (Peptide p in proteom.Peptides)
+            {
+                double hydroKD = HRegionHydro(p);
+                if (hydroKD == -100) continue;
+                if (p.Sequence.StartsWith("M"))
+                    CysRichPeptide(p, ref i, hydroKD);
+
+            }
+
+        }
+
+        static Excel.Application excelApp = new Excel.Application();
+        static Excel.Workbook workBook;
+        static Excel.Worksheet workSheet;
+        static void Main(string[] args)
+        {
+            workBook = excelApp.Workbooks.Add();
+            workSheet = excelApp.ActiveSheet;
+
+            Fasta proteom = new Fasta("human-sequencesWithSP.fasta");
+
+            Filter(proteom);
+
+            workBook.SaveAs(Environment.CurrentDirectory + 
+                @"\HumanCysRichPeptides.xlsx");
+            workBook.Close();
+
+        }
+    }
+}
+
+/*---------------------------------------------------------C#-----------------------------------------------------
+  ein Teil des Projekts "Pfadplanung für einen LEGO-EV3-Roboter durch die Nutzung von Voronoi-Diagrammen" 
+----------------------------------------------------------------------------------------------------------------*/
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Lego.Ev3.Core;
+using Lego.Ev3.Desktop;
+
+namespace Voronoi
+{
+    public class Robot
+    {
+         private double x = 0, y = 0, orientation = 0;
+
+        public double X
+        {
+            get { return x; }
+            set { x = value; }
+        }
+
+        public double Y
+        {
+            get { return y; }
+            set { y = value; }
+        }
+
+        public double Orientation
+        {
+            get { return orientation; }
+            set { orientation = value; }
+        }
+
+        private double axle;  // length of wheel axle
+        public double Axle
+        {
+            get { return axle; }
+            set { axle = value; }
+        }
+
+        private static double wheelDiameter;
+        public static double WheelDiameter
+        {
+            get { return Robot.wheelDiameter; }
+            set { Robot.wheelDiameter = value; }
+        }
+
+        private string com;  // bluetooth port
+        public string Com
+        {
+            get { return com; }
+            set { com = value; }
+        }
+        public static uint T = 360;  // tachometer counts per revolution
+
+        /// <summary>
+        /// Position estimation for a mobile robot
+        /// </summary>
+        /// <param name="tr">tachometer counts of right wheel</param>
+        /// <param name="tl">tachometer counts of left wheel</param>
+        public void Odometry(int tr, int tl)
+        {
+            double ds = (Math.PI / T) * (WheelDiameter / 2) * (tr + tl);
+            double dOr = (Math.PI / T) * (WheelDiameter / Axle) * (tr - tl);
+
+            X += (ds * Math.Cos(Orientation + dOr / 2));
+            Y += (ds * Math.Sin(Orientation + dOr / 2));
+            Orientation += dOr;
+        }
+
+        Brick br;
+
+        private int speed;
+        public int Speed
+        {
+            get { return speed; }
+            set
+            {
+                if (speed < -100 || speed > 100)
+                    throw new ArgumentException("Speed must be between -100 and 100 inclusive.", "speed");
+                else
+                    speed = value;
+            }
+        }
+
+        /// <summary>
+        /// turn robot to a certain angle
+        /// </summary>
+        /// <param name="direction">direction of rotation(left or right)</param>
+        /// <param name="angle">rotation angle(0° to 360°)</param>
+        public async void TurnToAngle(string direction, double angle) //EventHandler
+        {
+            if (angle == 0)
+                return;
+
+            if (direction != "left" && direction != "right")
+                throw new ArgumentException("Unproper direction!");
+
+            if (angle < 0 || angle > 360)
+                throw new ArgumentException("Angle must be between 0 and 360 degrees inclusive");
+
+            angle *= (Math.PI / 180);   //convert degrees to radians
+
+            //tachometer counts of wheel
+            uint t = (uint)Math.Round((angle * Axle * T) / (2 * WheelDiameter * Math.PI));
+            if (direction == "right")
+            { 
+                br.BatchCommand.StepMotorAtSpeed(OutputPort.B, -Speed, t, true);
+                br.BatchCommand.StepMotorAtSpeed(OutputPort.C, Speed, t, true);
+                await br.BatchCommand.SendCommandAsync();
+            }
+
+            else
+            {
+                br.BatchCommand.StepMotorAtSpeed(OutputPort.B, Speed, t, true);
+                br.BatchCommand.StepMotorAtSpeed(OutputPort.C, -Speed, t, true);
+                await br.BatchCommand.SendCommandAsync();
+            }
+        }
+
+        public async void Forward(uint units) //EventHandler
+        {
+            if (units == 0)
+                return;
+            await br.DirectCommand.StepMotorAtSpeedAsync(OutputPort.B | OutputPort.C, Speed, units, true);
+        }
+
+        public async void Stop() //EventHandler
+        {
+            await br.DirectCommand.StopMotorAsync(OutputPort.All, true);
+        }
+
+        public void Disconnect()
+        {
+            br.Disconnect();
+        }
+
+        public Robot(double _axle, double _wheelDiameter, string _com)
+        {
+            br = new Brick(new BluetoothCommunication(_com));
+            br.ConnectAsync();
+            Axle = _axle;
+            WheelDiameter = _wheelDiameter;
+            Com = _com;
+
+            Action.ForwardEvent += new ForwardEventHandler(this.Forward);
+            Action.RotateEvent += new RotateEventHandler(this.TurnToAngle);
+            RobotView.StopEvent += new StopEventHandler(this.Stop);
+        }
+        
+    }
+
+    public delegate void RotateEventHandler(string direction, double angle);
+    public delegate void ForwardEventHandler(uint units);
+
+    public class Action
+    {
+        public static event RotateEventHandler RotateEvent;
+        public static event ForwardEventHandler ForwardEvent;
+
+        public void OnRotate() 
+        {
+            if (RotateEvent != null)
+                RotateEvent(RotationDirection, RotationAngle);
+        }
+
+        public uint Steps { get; set; }
+        public void OnForward() 
+        {
+            Steps = (uint)(Math.Round(Units * Scale));
+            if (ForwardEvent != null)
+                ForwardEvent(Steps);
+        }
+
+        private static double scale;
+        public static double Scale
+        {
+            get { return Action.scale; }
+            set { Action.scale = value; }
+        }
+
+        private double units;
+        public double Units
+        {
+            get { return units; }
+            set { units = value; }
+        }
+        public double RotationAngle { get; set; }
+        public string RotationDirection { get; set; }
+
+        public Action(double units, double rotAngle, string rotDir)
+        {
+            Units = units;
+            RotationAngle = rotAngle;
+            RotationDirection = rotDir;
+        }
+
+        public override string ToString()
+        {
+            return "Move forward " + units + " units, "
+            + "Rotate " + RotationAngle + " degrees " + RotationDirection;
+        }
+    }
+}
+
+
+
+/*-------------------------------------------------C++-----------------------------------------------
+                                            parallel tempering
+---------------------------------------------------------------------------------------------------*/
+
+#include <fstream>
+#include <iostream>
+#include <cmath>
+
+using namespace std;
+
+# define M_PI	3.14159265358979323846
+
+double binSize = 0.01;	// širina jednog bina histograma p(x)
+int numBin = (int)(4. / binSize);	// broj binova histograma p(x)
+double** px;	// histogram p(x); px[i][j] oznaèava j-ti bin za histogram na temperaturi koja se nalazi na indeksu i; indeksa j imamo numBin
+
+double Random(double delta)	// vraæa nasumièan broj iz intervala [-delta,delta]
+{
+	return 2 * ((double)rand() / RAND_MAX - 0.5) * delta;
+
+}
+
+// inicijalizacija položaja
+void InitializePos(double* x, int nSys)	// x je polje sustava(replika) na razlièitim temperaturama; sustava, tj. temperatura imammo nSys
+{
+	for (int i = 0; i < nSys; i++)
+		x[i] = Random(2);	// položaje postavljamo u interval <-2,2> jer analitièki nalazimo da je gustoæa vjerojatnosti periodièka funkcija 
+
+}
+
+// inicijalizacija temperatura; NAPOMENA: oznaka temperature T u programu je zaparavo Boltzmannova konstanta*prava temperatura
+void InitializeTemp(double* T, int nSys, double dT)	// T je polje temperatura kojih imamo nSys; dT je razlika susjednih temperatura
+{
+	for (int i = 0; i < nSys; i++)
+		T[i] = (i + 1) * dT;	// temperature moraju biti poredane na sljedeæi naèin: T[0]<T[1]<...<T[nSys-1]
+
+}
+
+// potencijalna energija zadana u projektu
+double E(double x)
+{
+	double u;
+	if (x >= -2 && x <= -1.25)
+		u = 1 * (1 + sin(2 * M_PI * x));
+	else if (x > -1.25 && x <= -0.25)
+		u = 2 * (1 + sin(2 * M_PI * x));
+	else if (x > -0.25 && x <= 0.75)
+		u = 3 * (1 + sin(2 * M_PI * x));
+	else if (x > 0.75 && x <= 1.75)
+		u = 4 * (1 + sin(2 * M_PI * x));
+	else if (x > 1.75 && x <= 2)
+		u = 5 * (1 + sin(2 * M_PI * x));
+
+	return u;
+
+}
+
+// Metropolis algoritam za pomak èestice
+void ParticleDisplacement(double* x, double* T, int nSys, double delta, double& acceptancePos)	// polje sustava, polje temperatura, broj sustava(temperatura), maksimalni pomak èestice, prihvaæenost pomaka èestice
+{
+	double deltaX;	// promjena položaja èestice
+	double deltaE;	// promjena energije sustava
+
+	for (int i = 0; i < nSys; i++)	// iteracija po sustavima
+	{
+		deltaX = Random(delta);
+		if (x[i] + deltaX < -2 || x[i] + deltaX > 2)	// èestica se ne smije naæi izvan intervala [-2,2]
+		{
+			int bin = (int)((x[i] + 2) / binSize);	// indeks bina u histogramu
+			px[i][bin]++;
+			continue;
+		}
+
+		deltaE = E(x[i] + deltaX) - E(x[i]);
+
+		if (deltaE <= 0 || (double)rand()/RAND_MAX < exp(-deltaE / T[i]))	// Metropolis: random € [0,1] < min(1,exp(-deltaE/T))
+		{
+			acceptancePos++;
+			x[i] += deltaX;
+		}
+
+		int bin = (int)((x[i] + 2) / binSize);	// indeks bina
+		px[i][bin]++;
+	}
+
+}
+
+// Zamjena sustava na susjednim temperaturama
+void HamiltonianSwapping(double* x, double* T, int nSys, double& acceptanceTemp)	// polje sustava, polje temperatura, broj sustava(temperatura), prihvaæenost zamjene sustava
+{
+	int i = rand() % (nSys - 2);	// indeks sustava; i < nSys -1
+
+	double deltaB = 1 / T[i] - 1 / T[i + 1];
+	double deltaE = E(x[i]) - E(x[i + 1]);
+
+	if (deltaB*deltaE >= 0 || (double)rand() / RAND_MAX < exp(deltaB*deltaE))	// random € [0,1] < min(1,exp(deltaB*deltaE))
+	{
+		acceptanceTemp++;
+
+		// zamjena susjednih sustava
+		double xTemp = x[i + 1];
+		x[i + 1] = x[i];
+		x[i] = xTemp;
+	}
+
+}
+
+void main()
+{
+	int nSys = 200;	// broj sustava(temperatura)
+	double dT = 0.05;	// razlika susjednih temperatura
+
+	px = new double*[nSys];	// histogram p(x)
+	for (int i = 0; i < nSys; i++)	// iteracija po temperaturama
+	{
+		px[i] = new double[numBin];
+
+		for (int j = 0; j < numBin; j++)
+			px[i][j] = 0;	// svaki bin postavi na nulu
+	}
+	
+	double* x = new double[nSys];	// polje sustava
+	double* T = new double[nSys];	// polje temperatura
+
+	InitializePos(x, nSys);	// inicijalizacija položaja
+	InitializeTemp(T, nSys, dT);	// inicijalizacija temperatura
+	
+	double delta = 0.1;	// maksimalni pomak èestice
+
+	double acceptancePos = 0;	// prihvaæenost pomaka èestice
+	double acceptanceTemp = 0;	// prihvaæenost zamjene sustava
+	double accPercentagePos;	// prihvaæenost pomaka èestice u postotcima
+	double accPercentageTemp;	// prihvaæenost zamjene sustava u postotcima
+
+	int nSwap = 4;	// nakon nSwap puta pokušamo zamijeniti susjedne sustave (na susjednim temperaturama)
+	int nTotal = 160000;	// nTotal puta radimo pomak èestice za sve sustave
+
+	for (int i = 0; i < nTotal / nSwap; i++)
+	{
+		for (int j = 0; j < nSwap; j++)
+			ParticleDisplacement(x, T, nSys, delta, acceptancePos);
+
+		// prilagoðavamo maksimalni pomak èestice takav da je prihvaæenost pomaka 50%
+		accPercentagePos = acceptancePos / ((i + 1)*nSwap*nSys);
+		if (accPercentagePos > 0.5) delta *= 1.05;
+		if (accPercentagePos < 0.5) delta *= 0.95;
+
+		HamiltonianSwapping(x, T, nSys, acceptanceTemp);
+		cout << i << endl;
+
+	}
+	// primjetimo da ParticleDisplacement funkciju pozivamo nTotal puta, a funkciju HamiltonianSwapping pozivamo nTotal / nSwap puta
+	// poželjno je pomak èestice raditi 90% puta, a zamjenu sustava 10% puta
+	// to postižemo odabirom nSwap = 9, nTotal = 90 000; nTotal = 180 000
+
+	// ako želimo pomak èestice rediti 80%  puta, a zamjenu sustava 20% puta
+	// odabiremo nSwap = 4, nTotal = 160 000
+
+	accPercentageTemp = acceptanceTemp / nTotal / nSwap;	// prihvaæenost zamjene sustava u postotcima
+
+	ofstream data("data.txt");
+	data << "x kT=0.05J kT=0.3J kT=2.0J" << endl;
+	
+	// konstante normiranja histograma p(x) za "temperature" kT = 0.05J, kT = 0.3J, kT = 2.0J
+	double normCon1 = 0;
+	double normCon2 = 0;
+	double normCon3 = 0;
+
+	// raèunamo integral p(x)dx
+	for (int i = 0; i < numBin; i++)
+	{
+		normCon1 += binSize * px[0][i]; // za dT = 0.025 temperatura T = 0.05 nalazi se na indeksu 1, za dT = 0.05 na indeksu 0
+		normCon2 += binSize * px[5][i]; // za dT = 0.025 temperatura T = 0.3 nalazi se na indeksu 11, za dT = 0.05 na indeksu 5
+		normCon3 += binSize * px[39][i]; // za dT = 0.025 temperatura T = 2.0 nalazi se na indeksu 79, za dT = 0.05 na indeksu 39
+	}
+
+	for (int i = 0; i < numBin; i++)
+		data << i*binSize - 2 << "\t" << px[0][i] / normCon1 << "\t" << px[5][i] / normCon2 << "\t" << px[39][i] / normCon3 << endl;
+
+	cout << "displacement acceptance = " << accPercentagePos << endl;
+	cout << "temperature acceptance = " << accPercentageTemp << endl;
+
+	cin.sync();
+	cin.get();
+
+}
+
+
+/*-------------------------------------------------C++--------------------------------------------------
+                                     Strahlungsdiagramm einer Antenne
+------------------------------------------------------------------------------------------------------*/
+#include <iostream>
+#include <fstream>
+#include <cmath>
+
+using namespace std;
+const double Pi = 4.0*atan(1.0);
+
+
+double R(double x, double y, double z)
+{
+	return sqrt(x*x+y*y+z*z);
+}
+
+double Phi(double x, double y, double z)
+{
+	double arcsin=asin(y/(sqrt(x*x+y*y)));
+
+	if(x >= 0 && y >= 0) return arcsin*(180/Pi);
+	else if(x >= 0 && y < 0) return  (2*Pi + arcsin)*(180/Pi);
+	else return (Pi - arcsin)*(180/Pi);
+
+}
+
+double Theta(double x,double y, double z)
+{
+	double arccos=acos(z/sqrt(x*x+y*y+z*z));
+
+	if(x < 0) return (2*Pi - arccos)*(180/Pi);
+	else return arccos*(180/Pi);
+
+}
+
+int round(double d)
+{
+  return (int)floor(d + 0.5);
+}
+
+double Horizontal(double *H, double x, double y, double z) 
+{
+	return H[round(Phi(x, y, z))];
+}
+
+double Vertical(double *V, double x, double y, double z)
+{
+	return V[round(Theta(x, y, z))];
+}
+
+void HorizontalCrossSection(double EIRP, double N,double *H, double *V, double z0, double x1, double x2, int Nx, double y1, double y2, int Ny) 
+{
+	double dx = (x2 - x1)/(double)Nx;
+	double dy = (y2 - y1)/(double)Ny;
+	double C = 2*sqrt(30*N*pow(10,(EIRP-30)/10)); 
+
+	ofstream izlaz;
+	izlaz.open("horizontalni_presjek.txt");
+
+	double G,r,E;
+
+	for(int i = 0; i <= Nx; i++)
+	{
+		for(int j = 0; j <= Ny; j++)
+		{
+			G = pow(10,(Horizontal(H,x1+i*dx,y1+j*dy,z0)+Vertical(V,x1+i*dx,y1+j*dy,z0))/10);
+			r = sqrt((x1+i*dx)*(x1+i*dx)+(y1+j*dy)*(y1+j*dy)+z0*z0);
+			E = C*sqrt(G)/r;
+
+			izlaz << x1+i*dx << "   " << y1+j*dy << "   " << E << endl;
+
+		}
+
+		izlaz << endl;
+
+	}
+
+}
+
+void VerticalCrossSection(double EIRP, double N,double *H, double *V, double y0, double x1, double x2, int Nx, double z1, double z2, int Nz) 
+{
+	double dx = (x2 - x1)/(double)Nx;
+	double dz = (z2 - z1)/(double)Nz;
+	double C = 2*sqrt(30*N*pow(10,(EIRP-30)/10));
+	
+	ofstream izlaz;
+	izlaz.open("vertikalni_presjek.txt");
+
+	double G,r,E;
+
+	for(int i = 0; i <= Nx; i++)
+	{
+		for(int j = 0; j <= Nz; j++)
+		{
+			G = pow(10,(Horizontal(H,x1+i*dx,y0,z1+j*dz)+Vertical(V,x1+i*dx,y0,z1+j*dz))/10);
+			r = sqrt((x1+i*dx)*(x1+i*dx)+y0*y0+(z1+j*dz)*(z1+j*dz));
+			E = C*sqrt(G)/r;
+
+			izlaz << x1+i*dx << "   " << z1+j*dz << "   " << E << endl;
+
+		}
+
+		izlaz << endl;
+
+	}
+
+}
+
+int main()
+{
+	double H[360];
+	double V[360];
+
+	ifstream horizontalDiagram;
+	horizontalDiagram.open("horizontal_diagram.txt");
+	ifstream verticalDiagram;
+	verticalDiagram.open("vertical_diagram.txt");
+
+	for(int i = 0; i < 360; i++)
+	{
+		horizontalDiagram >> H[i]; horizontalDiagram >> H[i];
+		verticalDiagram >> V[i]; verticalDiagram >> V[i];		
+	}
+
+	HorizontalCrossSection(59.5,2,H,V, 0,-20,20,1000,-20,20,1000);
+
+}
+
+
+/*-----------------------------------------------Python------------------------------------------------
+                                PID-Steuerung des Ball-auf-Platte-Systems
+-----------------------------------------------------------------------------------------------------*/
+
+from camshift import *
+from servo import *
+from pid import *
+import time
+
+if __name__ == "__main__":
+    ot = ObjectTracker(480, 480, 240, 240, 80, 80)
+
+    servo_x = Servo(18)
+    servo_y = Servo(13)
+
+    target_x = ot.frame_x_px / 2
+    target_y = ot.frame_y_px / 2
+
+    pid_x = PID(0.0000075, 0.0000003, 0.0025, 0.01, -0.01, 0.05)
+    pid_y = PID(0.0000075, 0.0000003, 0.0025, 0.01, -0.01, 0.05)
+
+    trajectory = open("trajectory.dat", "w")
+    xt = open("xt.dat", "w")
+    yt = open("yt.dat", "w")
+    w = open ("w.dat", "w")
+    px_to_cm = 0.0723
+
+    start = True
+    time_start = None
+
+    # platformu u horizontalni polozaj
+    servo_x.run()
+    servo_y.run()
+    # keep looping
+    for (x, y) in ot.start_tracking():
+        if start:
+            time_start = time.time()
+            start = False
+
+        time_current = time.time()
+        if time_current - time_start > 40:
+            break
+        trajectory.write("%.2f\t%.2f\t%.2f\t%.2f\n" % (x * px_to_cm, -y * px_to_cm, target_x * px_to_cm, -target_y * px_to_cm))
+        xt.write("%.2f\t%.2f\t%.2f\n" % (time_current - time_start, x * px_to_cm, target_x * px_to_cm))
+        yt.write("%.2f\t%.2f\t%.2f\n" % (time_current - time_start, -y * px_to_cm, -target_y * px_to_cm))
+        w.write("%.5f\n" % pid_x.w)
+
+        # p_error = p_state - p_target
+        p_error_x = x - target_x
+        p_error_y = y - target_y
+
+        servo_x.duty_cycle = -pid_x.update_PID(p_error_x, x) + servo_x.centre_duty_cycle
+        servo_y.duty_cycle = pid_y.update_PID(p_error_y, y) + servo_y.centre_duty_cycle
+
+        servo_x.run(servo_x.duty_cycle)
+        servo_y.run(servo_y.duty_cycle)
+
+    trajectory.close()
+    xt.close()
+    yt.close()
+    w.close()
+
+    del servo_x
+    del servo_y
+
+-------------------------------------------------------------------servo.py-----------------------------------------
+import pigpio
+import time
+
+class Servo(object):
+
+    def __init__(self, pwm_pin):
+        self._gpio = pigpio.pi()
+
+        #
+        # pigpio uses BROADCOM PIN NUMBERING !!!
+        #
+
+        if pwm_pin != 13 and pwm_pin != 18:
+            raise ValueError("Hardware PWM is available only on pins 13 and 18 (BROADCOM PIN NUMBERING).")
+        self._pwm_pin = pwm_pin
+
+        self._freq = 50 # 50Hz
+        self._duty_cycle = None
+        self._centre_duty_cycle = 0.075
+
+        # Set the GPIO-Mode to ALT5 for HW-PWM
+        self._gpio.set_mode(self.pwm_pin, pigpio.ALT5)
+
+    @property
+    def pwm_pin(self):
+        return self._pwm_pin
+
+    @property
+    def freq(self):
+        return self._freq
+
+    @property
+    def duty_cycle(self):
+        return self._duty_cycle
+
+    @duty_cycle.setter
+    def duty_cycle(self, value):
+        '''
+        if value < 0.065 or value > 0.085:
+            raise ValueError("Duty cycle must be in range [6.5,8.5]%")
+        self._duty_cycle = value
+        '''
+        if value < 0.065:
+            self._duty_cycle = 0.065
+        elif value > 0.085:
+            self._duty_cycle = 0.085
+        else:
+            self._duty_cycle = value
+
+    @property
+    def centre_duty_cycle(self):
+        return self._centre_duty_cycle
+
+    def run(self, duty_cycle = 0.075): # 0 degrees - the centre position with 7.5% duty cycle, - 90 degrees with 5% duty cycle, + 90 degrees with 10% duty cycle
+        self.duty_cycle = duty_cycle
+
+        # Start the signal generation
+        self._gpio.hardware_PWM(self.pwm_pin, self.freq, self.duty_cycle * 1000000)
+
+    def __del__(self):
+        # Pull down the GPIO-Pin and cleanup with stop()
+        self._gpio.write(self.pwm_pin, 0)
+        self._gpio.stop()
+
+if __name__ == "__main__":
+    servo_x = Servo(18)
+    servo_y = Servo(13)
+
+    try:
+        servo_x.run()
+        servo_y.run()
+        # Keep the script running until Ctrl + C are pressed
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
+
+    del servo_x
+    del servo_y
+
+--------------------------------camshift.py-------------------------------------------------
+import cv2
+import numpy as np
+from imutils.video.pivideostream import PiVideoStream
+import time
+
+# Define a class to handle object tracking related functionality
+class ObjectTracker(object):
+    def __init__(self, frame_x_px, frame_y_px, target_x, target_y, start_x, start_y):
+        # Initialize the video capture object
+        self.cap = PiVideoStream(resolution=(frame_x_px, frame_y_px)).start()
+        time.sleep(1.0)  # allow the camera to warmup
+
+        self.frame_x_px = frame_x_px
+        self.frame_y_px = frame_y_px
+
+        self.target_x = target_x
+        self.target_y = target_y
+
+        self.start_x = start_x
+        self.start_y = start_y
+
+        # Define the codec and create VideoWriter object
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        self._video = cv2.VideoWriter('ballBalanceMachine.avi', fourcc, 20.0, (self.frame_x_px, self.frame_y_px))
+
+        self.object_center = (0, 0)
+
+        # Capture the frame from the webcam
+        self.frame = self.cap.read()
+
+        # Create a window to display the frame
+        cv2.namedWindow('Object Tracker')
+
+        # Set the mouse callback function to track the mouse
+        cv2.setMouseCallback('Object Tracker', self.mouse_event)
+
+        # Initialize variable related to rectangular region selection
+        self.selection = None
+
+        # Initialize variable related to starting position 
+        self.drag_start = None
+
+        # Initialize variable related to the state of tracking 
+        self.tracking_state = 0
+
+    # Define a method to track the mouse events
+    def mouse_event(self, event, x, y, flags, param):
+        # Convert x and y coordinates into 16-bit numpy integers
+        x, y = np.int16([x, y]) 
+
+        # Check if a mouse button down event has occurred
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drag_start = (x, y)
+            self.tracking_state = 0
+            # http://answers.opencv.org/question/18004/mouse-problem-in-python-2-examples-ubuntu-1204/
+            # Placing a return statement after setting the self.drag_start to (x, y) fix the problem.
+            # It seems that 'flags' doesn't notify that the left click was pressed on the first time.
+            return
+
+        # Check if the user has started selecting the region
+        if self.drag_start:
+            if flags & cv2.EVENT_FLAG_LBUTTON:
+                # Extract the dimensions of the frame
+                h, w = self.frame.shape[:2]
+
+                # Get the initial position
+                xi, yi = self.drag_start
+
+                # Get the max and min values
+                x0, y0 = np.maximum(0, np.minimum([xi, yi], [x, y]))
+                x1, y1 = np.minimum([w, h], np.maximum([xi, yi], [x, y]))
+
+                # Reset the selection variable
+                self.selection = None
+
+                # Finalize the rectangular selection
+                if x1-x0 > 0 and y1-y0 > 0:
+                    self.selection = (x0, y0, x1, y1)
+
+            else:
+                # If the selection is done, start tracking  
+                self.drag_start = None
+                if self.selection is not None:
+                    self.tracking_state = 1
+
+    # Method to start tracking the object
+    def start_tracking(self):
+        # Iterate until the user presses the Esc key
+        while True:
+            # Capture the frame from webcam
+            self.frame = self.cap.read()
+
+            # Create a copy of the frame
+            vis = self.frame.copy()
+
+            # Convert the frame to HSV colorspace
+            hsv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
+
+            # Create the mask based on predefined thresholds
+            mask = cv2.inRange(hsv, np.array((0., 60., 32.)), 
+                        np.array((180., 255., 255.)))
+
+            # Check if the user has selected the region
+            if self.selection:
+                # Extract the coordinates of the selected rectangle
+                x0, y0, x1, y1 = self.selection
+
+                # Extract the tracking window
+                self.track_window = (x0, y0, x1-x0, y1-y0)
+
+                # Extract the regions of interest 
+                hsv_roi = hsv[y0:y1, x0:x1]
+                mask_roi = mask[y0:y1, x0:x1]
+
+                # Compute the histogram of the region of 
+                # interest in the HSV image using the mask
+                hist = cv2.calcHist( [hsv_roi], [0], mask_roi, 
+                        [16], [0, 180] )
+
+                # Normalize and reshape the histogram
+                cv2.normalize(hist, hist, 0, 255, cv2.NORM_MINMAX);
+                self.hist = hist.reshape(-1)
+
+                # Extract the region of interest from the frame
+                vis_roi = vis[y0:y1, x0:x1]
+
+                # Compute the image negative (for display only)
+                cv2.bitwise_not(vis_roi, vis_roi)
+                vis[mask == 0] = 0
+
+            # Check if the system in the "tracking" mode
+            if self.tracking_state == 1:
+                # Reset the selection variable
+                self.selection = None
+                
+                # Compute the histogram back projection
+                hsv_backproj = cv2.calcBackProject([hsv], [0], 
+                        self.hist, [0, 180], 1)
+
+                # Compute bitwise AND between histogram 
+                # backprojection and the mask
+                hsv_backproj &= mask
+
+                # Define termination criteria for the tracker
+                term_crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 
+                        10, 1)
+
+                # Apply CAMShift on 'hsv_backproj'
+                track_box, self.track_window = cv2.CamShift(hsv_backproj, 
+                        self.track_window, term_crit)
+
+                # Draw an ellipse around the object
+                cv2.ellipse(vis, track_box, (0, 255, 0), 2)
+                self.object_center = (int(track_box[0][0]), int(track_box[0][1]))
+                cv2.circle(vis, self.object_center, 5, (0, 0, 255), -1)
+
+                cv2.line(vis, (self.target_x - 5, self.target_y), (self.target_x + 5, self.target_y), [255, 0, 0], 2)
+                cv2.line(vis, (self.target_x, self.target_y - 5), (self.target_x, self.target_y + 5), [255, 0, 0], 2)
+                cv2.line(vis, (self.start_x - 5, self.start_y), (self.start_x + 5, self.start_y), [255, 0, 0], 2)
+                cv2.line(vis, (self.start_x, self.start_y - 5), (self.start_x, self.start_y + 5), [255, 0, 0], 2)
+                self._video.write(vis)
+
+                yield self.object_center
+
+            #cv2.line(vis, (self.target_x - 5, self.target_y), (self.target_x + 5, self.target_y), [255, 0, 0], 2)
+            #cv2.line(vis, (self.target_x, self.target_y - 5), (self.target_x, self.target_y + 5), [255, 0, 0], 2)
+            cv2.line(vis, (self.start_x - 5, self.start_y), (self.start_x + 5, self.start_y), [255, 0, 0], 2)
+            cv2.line(vis, (self.start_x, self.start_y - 5), (self.start_x, self.start_y + 5), [255, 0, 0], 2)
+
+            # Show the output live video
+            cv2.imshow('Object Tracker', vis)
+
+            # Stop if the user hits the 'Esc' key
+            c = cv2.waitKey(5)
+            if c == 27:
+                break
+
+
+        # cleanup the camera and close any open windows
+        self.cap.stop()
+        self._video.release()
+        cv2.destroyAllWindows()
+
+if __name__ == '__main__':
+    # Start the tracker
+    ot = ObjectTracker(480, 480, 240, 240, 60, 60)
+
+    noise_x = open("noise_x.dat", "w")
+    noise_y = open("noise_y.dat", "w")
+    px_to_cm = 0.0723
+    px_to_mm = px_to_cm * 10
+
+    start = True
+    time_start = None
+
+    for (x, y) in ot.start_tracking():
+        if start:
+            time_start = time.time()
+            start = False
+
+        time_current = time.time()
+        if time_current - time_start > 30:
+            break
+        noise_x.write("%.2f\t%.2f\n" % (time_current - time_start, x * px_to_mm))
+        noise_y.write("%.2f\t%.2f\n" % (time_current - time_start, -y * px_to_mm))
+
+    noise_x.close()
+    noise_y.close()
+
+
+-------------------pid.py--------ein fremder Quellcode, den ich nach meinem Bedarf bearbeitet habe-----------------
+""" A simple PID controller class.  
+
+This is a mostly literal C++ -> Python translation of the ROS
+control_toolbox Pid class: http://ros.org/wiki/control_toolbox.
+"""
+
+import time
+import math
+
+#*******************************************************************
+# Translated from pid.cpp by Nathan Sprague
+# Jan. 2013
+# See below for original license information:
+#*******************************************************************
+
+#******************************************************************* 
+# Software License Agreement (BSD License)
+#
+#  Copyright (c) 2008, Willow Garage, Inc.
+#  All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions
+#  are met:
+#
+#   * Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#   * Redistributions in binary form must reproduce the above
+#     copyright notice, this list of conditions and the following
+#     disclaimer in the documentation and/or other materials provided
+#     with the distribution.
+#   * Neither the name of the Willow Garage nor the names of its
+#     contributors may be used to endorse or promote products derived
+#     from this software without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+#  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+#  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+#  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+#  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+#  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+#  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+#  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+#  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+#  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#******************************************************************* 
+
+
+
+class PID(object):
+    """ A basic pid class.
+
+    This class implements a generic structure that can be used to
+    create a wide range of pid controllers. It can function
+    independently or be subclassed to provide more specific controls
+    based on a particular control loop.
+
+    In particular, this class implements the standard pid equation:
+
+    $command = -p_{term} - i_{term} - d_{term} $
+
+    where:
+
+    $ p_{term} = p_{gain} * p_{error} $
+    $ i_{term} = i_{gain} * i_{error} $
+    $ d_{term} = d_{gain} * d_{error} $
+    $ i_{error} = i_{error} + p_{error} * dt $
+    $ d_{error} = (p_{error} - p_{error last}) / dt $
+
+    given:
+
+    $ p_{error} = p_{state} - p_{target} $.
+    """
+
+    def __init__(self, p_gain, i_gain, d_gain, cmd_max, cmd_min, tau):
+        """Constructor, zeros out Pid values when created and
+        initialize Pid-gains and integral term limits.
+
+        Parameters:
+          p_gain     The proportional gain.
+          i_gain     The integral gain.
+          d_gain     The derivative gain.
+          i_max      The integral upper limit.
+          i_min      The integral lower limit. 
+        """
+
+        # Eckner, A (2014). A Framework for the Analysis of Unevenly Spaced Time Series Data
+        # http://www.eckner.com/papers/Algorithms%20for%20Unevenly%20Spaced%20Time%20Series.pdf
+        # Accessed February, 2018
+        self._tau = tau # filter time constant
+        self._state_filtered = None
+        self.w = 0
+
+        # integral anti-windup
+        i_max = 0.2 * (cmd_max - cmd_min)
+        i_min = -0.2 * (cmd_max - cmd_min)
+
+        self.set_gains(p_gain, i_gain, d_gain, i_max, i_min)
+        self.reset()
+
+    def reset(self):
+        """  Reset the state of this PID controller """
+        self._p_error = 0.0 # Position error.
+        self._d_error = 0.0 # Derivative error.
+        self._i_error = 0.0 # Integator error.
+        self._cmd = 0.0 # Command to send.
+        self._last_time = None # Used for automatic calculation of dt.
+        
+    def set_gains(self, p_gain, i_gain, d_gain, i_max, i_min):
+        """ Set PID gains for the controller. 
+
+         Parameters:
+          p_gain     The proportional gain.
+          i_gain     The integral gain.
+          d_gain     The derivative gain.
+          i_max      The integral upper limit.
+          i_min      The integral lower limit. 
+        """ 
+        self._p_gain = p_gain
+        self._i_gain = i_gain
+        self._d_gain = d_gain
+        self._i_max = i_max
+        self._i_min = i_min
+
+    @property
+    def p_gain(self):
+        """ Read-only access to p_gain. """
+        return self._p_gain
+
+    @property
+    def i_gain(self):
+        """ Read-only access to i_gain. """
+        return self._i_gain
+
+    @property
+    def d_gain(self):
+        """ Read-only access to d_gain. """
+        return self._d_gain
+
+    @property
+    def i_max(self):
+        """ Read-only access to i_max. """
+        return self._i_max
+
+    @property
+    def i_min(self):
+        """ Read-only access to i_min. """
+        return self._i_min
+
+    @property
+    def p_error(self):
+        """ Read-only access to p_error. """
+        return self._p_error
+
+    @property
+    def i_error(self):
+        """ Read-only access to i_error. """
+        return self._i_error
+
+    @property
+    def d_error(self):
+        """ Read-only access to d_error. """
+        return self._d_error
+
+    @property
+    def cmd(self):
+        """ Read-only access to the latest command. """
+        return self._cmd
+
+
+    def __str__(self):
+        """ String representation of the current state of the controller. """
+        result = ""
+        result += "p_gain:  " + str(self.p_gain) + "\n"
+        result += "i_gain:  " + str(self.i_gain) + "\n"
+        result += "d_gain:  " + str(self.d_gain) + "\n"
+        result += "i_max:   " + str(self.i_max) + "\n"
+        result += "i_min:   " + str(self.i_min) + "\n"
+        result += "p_error: " + str(self.p_error) + "\n"
+        result += "i_error: " + str(self.i_error) + "\n"
+        result += "d_error: " + str(self.d_error) + "\n"
+        result += "cmd:     " + str(self.cmd) + "\n"
+        return result
+        
+    def update_PID(self, p_error, state, dt=None):
+        """  Update the Pid loop with nonuniform time step size.
+
+        Parameters:
+          p_error  Error since last call (p_state - p_target)
+          dt       Change in time since last call, in seconds, or None.
+                   If dt is None, then the system clock will be used to
+                   calculate the time since the last update.
+        """
+        if dt == None:
+            cur_time = time.time()
+            if self._last_time is None:
+                self._last_time = cur_time
+            dt = cur_time - self._last_time
+            self._last_time = cur_time
+
+        self._p_error = p_error  # this is pError = pState-pTarget
+        if dt == 0 or math.isnan(dt) or math.isinf(dt):
+            return 0.0
+
+        # Calculate proportional contribution to command
+        p_term = self._p_gain * self._p_error
+
+        # Calculate the integral error
+        self._i_error += dt * self._p_error
+
+        # Calculate integral contribution to command
+        i_term = self._i_gain * self._i_error
+
+        # integral anti-windup
+        # Limit i_term so that the limit is meaningful in the output
+        if i_term > self._i_max and self._i_gain != 0:
+            i_term = self._i_max
+            self._i_error = i_term / self._i_gain
+        elif i_term < self._i_min and self._i_gain != 0:
+            i_term = self._i_min
+            self._i_error = i_term / self._i_gain
+
+        # Eckner, A (2014). A Framework for the Analysis of Unevenly Spaced Time Series Data
+        # http://www.eckner.com/papers/Algorithms%20for%20Unevenly%20Spaced%20Time%20Series.pdf
+        # Accessed February, 2018
+        # Calculate the derivative error
+        if self._state_filtered == None:
+            self._state_filtered = state
+
+        w = math.exp(-dt / self._tau)
+        self.w = w
+        self._d_error = self.d_gain * (1 - w) *(state - self._state_filtered) / dt
+        self._state_filtered = w * self._state_filtered + (1 - w) * state
+
+        # Calculate derivative contribution to command
+        d_term = self._d_gain * self._d_error
+
+        self._cmd = -p_term - i_term - d_term
+
+        return self._cmd
